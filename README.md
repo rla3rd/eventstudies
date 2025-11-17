@@ -1,6 +1,6 @@
 # Event Studies Library
 
-A Python package for performing financial event study analyses. This library provides tools to analyze the impact of events on security returns using various statistical models.
+A Python package for performing financial event study analyses. This library provides tools to analyze the impact of events on security returns using various statistical models. This package is a heavily modified version of Jean-Baptiste Lemaire's eventstudy package (https://github.com/LemaireJean-Baptiste/eventstudy)
 
 ## Overview
 
@@ -100,3 +100,4 @@ GNU General Public License v3 (GPLv3)
 ## Author
 
 Rick Albright
+Jean-Baptiste Lemaire
