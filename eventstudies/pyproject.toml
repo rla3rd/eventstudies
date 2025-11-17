@@ -24,14 +24,26 @@ dependencies = [
     "s3fs>=0.4.2",
     "seaborn>=0.13.0",
     "pyod>=2.0.5",
+    "openpyxl>=3.1.0",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
 ]
 
 [[project.authors]]
 name = "Rick Albright"
-email = "ralbright@verityplatform.com"
+email = "rla3rd@gmail.com"
 
 [project.urls]
-repository = "https://github.com/insiderscore/python-src/tree/master/eventstudies"
+repository = "https://github.com/rla3rd/eventstudies/tree/main/eventstudies"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -52,7 +64,9 @@ include = "\\.pyi?$"
 target-version = [
     "py310",
     "py311",
-    "py312"
+    "py312",
+    "py313",
+    "py314"
 ]
 
 [tool.isort]
@@ -69,7 +83,7 @@ tag_regex = "v(\\d+\\.\\d+\\.\\d+)"
 root = "."
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -77,6 +91,6 @@ disallow_incomplete_defs = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 select = ["E", "F", "B", "I"]
 ignore = []

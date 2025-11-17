@@ -1,6 +1,8 @@
 import sys
 import os
 import traceback
+from pathlib import Path
+from typing import List, Optional
 import numpy as np
 import pandas as pd
 from scipy.stats import t
@@ -251,3 +253,153 @@ def update_famafrench(start_date='2003-07-01', end_date=None):
             odf[key] = odf[key] / 100
     
     return odf
+
+def create_returns_parquet(
+    tickers: List[str],
+    output_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    data_source: str = 'yahoo',
+    use_adjusted: bool = True
+) -> pd.DataFrame:
+    """
+    Fetch stock data from pandas_datareader and create a returns parquet file
+    with tickers as columns, trade dates as index, and daily log returns as values.
+    
+    This function:
+    1. Fetches historical price data for each ticker from pandas_datareader
+    2. Calculates daily log returns for each ticker
+    3. Pivots the data to wide format (dates as index, tickers as columns)
+    4. Saves the result to a parquet file
+    
+    Parameters
+    ----------
+    tickers : List[str]
+        List of stock ticker symbols to fetch (e.g., ['AAPL', 'GOOGL', 'MSFT'])
+    output_path : str
+        Path where the parquet file will be saved (e.g., 'data/market/quotes.parquet')
+    start_date : str, optional
+        Start date for fetching data (YYYY-MM-DD format), by default None
+    end_date : str, optional
+        End date for fetching data (YYYY-MM-DD format), by default None (today)
+    data_source : str, optional
+        Data source for pandas_datareader (e.g., 'yahoo', 'tiingo', 'stooq', 'iex'), 
+        by default 'yahoo'
+    use_adjusted : bool, optional
+        If True, use adjusted close prices for calculating returns (accounts for splits/dividends),
+        by default True
+    
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with dates as index, tickers as columns, and log returns as values.
+        Missing values are filled with 0.
+    
+    Examples
+    --------
+    >>> from eventstudies.util import create_returns_parquet
+    >>> df = create_returns_parquet(
+    ...     tickers=['AAPL', 'GOOGL', 'MSFT'],
+    ...     output_path='data/market/returns.parquet',
+    ...     start_date='2020-01-01',
+    ...     end_date='2023-12-31'
+    ... )
+    """
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    
+    all_data = []
+    
+    for ticker in tickers:
+        try:
+            # Fetch data from pandas_datareader
+            df = pdr.DataReader(
+                ticker,
+                data_source,
+                start=start_date,
+                end=end_date
+            )
+            
+            if df.empty:
+                warnings.warn(f"No data returned for {ticker}")
+                continue
+            
+            # Select price column (adjusted close if available and requested, else close)
+            if use_adjusted and 'Adj Close' in df.columns:
+                price_col = 'Adj Close'
+            elif 'Close' in df.columns:
+                price_col = 'Close'
+            elif 'close' in df.columns:
+                price_col = 'close'
+            else:
+                warnings.warn(f"No close price column found for {ticker}. Available columns: {list(df.columns)}")
+                continue
+            
+            # Extract price series
+            prices = df[price_col].copy()
+            
+            # Calculate log returns: log(price_t / price_{t-1})
+            # Shift prices by 1 day to get previous day's price
+            prev_prices = prices.shift(1)
+            
+            # Calculate log returns, handling division by zero
+            log_returns = np.log(prices / prev_prices)
+            
+            # Create DataFrame with date, ticker, and log return
+            returns_df = pd.DataFrame({
+                'date': prices.index,
+                'ticker': ticker,
+                'logreturn': log_returns
+            })
+            
+            # Remove first row (NaN due to shift)
+            returns_df = returns_df.dropna()
+            
+            if not returns_df.empty:
+                all_data.append(returns_df)
+            else:
+                warnings.warn(f"No valid returns calculated for {ticker}")
+                
+        except Exception as e:
+            warnings.warn(f"Error fetching data for {ticker}: {e}")
+            import traceback
+            warnings.warn(f"Traceback: {traceback.format_exc()}")
+            continue
+    
+    if not all_data:
+        raise ValueError("No data was successfully fetched for any ticker")
+    
+    # Combine all ticker data
+    combined_df = pd.concat(all_data, ignore_index=True)
+    
+    # Convert date to datetime if needed
+    combined_df['date'] = pd.to_datetime(combined_df['date'])
+    
+    # Normalize dates to date-only (remove time/timezone if present)
+    if isinstance(combined_df['date'].dtype, pd.DatetimeTZDtype):
+        combined_df['date'] = combined_df['date'].dt.tz_localize(None)
+    combined_df['date'] = combined_df['date'].dt.normalize()  # Set time to 00:00:00
+    
+    # Pivot to wide format: dates as index, tickers as columns
+    df_wide = combined_df.pivot(index='date', columns='ticker', values='logreturn')
+    
+    # Fill NaN with 0 (missing returns are treated as 0)
+    df_wide = df_wide.fillna(0)
+    
+    # Rename index to 'date'
+    df_wide.index.rename("date", inplace=True)
+    
+    # Sort by date
+    df_wide = df_wide.sort_index()
+    
+    # Convert column names to string
+    df_wide.columns = df_wide.columns.astype(str)
+    
+    # Save to parquet
+    df_wide.to_parquet(output_path, index=True)
+    
+    print(f"Created returns parquet: {len(df_wide):,} dates × {len(df_wide.columns):,} tickers")
+    print(f"Date range: {df_wide.index.min()} to {df_wide.index.max()}")
+    print(f"Saved to: {output_path}")
+    
+    return df_wide

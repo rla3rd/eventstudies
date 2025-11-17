@@ -1,79 +1,102 @@
-Eventstudies Library
+# Event Studies Library
 
-Large portions of this library were lifted from
-https://github.com/LemaireJean-Baptiste/eventstudy
-and updated.  It is really just a fancy pants wrapper around
-statsmodels.api.OLS function, which is an ordinary least squares regression
-function.
+A Python package for performing financial event study analyses. This library provides tools to analyze the impact of events on security returns using various statistical models.
 
-The general premise of event studies is to do a regression analysis of some
-period prior to the event in question to come up with a baseline equation
-to estimate the log returns of a single event and determine if the actual return
-is statistically significant compared to the prediction.  This leads to a
-abnormal return value (AR), this value is the return above the expected return
-predicted + prediction error from the regression from the prior period. The
-daily AR values are then summed over the event window to creare a cumulative
-abnormal return value (CAR).  A t-test statistic is then generated over the
-event window for each day's CAR value, and the P-value is then calculated
-for significance daily over the event window to determine if the CAR values
-have any statistical significance that indicate that these values are indeed
-different from what was expected.
+## Overview
 
-The single events as described above are then aggregated and analyzed using
-the same t-test and P-value methodologies to determine if the aggregate of
-all events of the same type are statistically significant. These values are
-refered to as the average abnormal return (AAR) and the cumulative average
-abnormal return (CAAR).
+The general premise of event studies is to perform a regression analysis of some period prior to the event in question to establish a baseline equation that estimates the log returns of a single event and determines if the actual return is statistically significant compared to the prediction. This leads to an abnormal return value (AR), which is the return above the expected return (predicted value + prediction error from the regression from the prior period). The daily AR values are then summed over the event window to create a cumulative abnormal return value (CAR). A t-test statistic is generated over the event window for each day's CAR value, and the P-value is calculated for significance daily over the event window to determine if the CAR values have any statistical significance that indicates these values are indeed different from what was expected.
 
-This package has the following models: MeanAdjustedModel, RawReturnsModel,
-MarketAdjustedModel, MarketModel, FamaFrench3, Carhart, and FamaFrench5.  
+Single events as described above are then aggregated and analyzed using the same t-test and P-value methodologies to determine if the aggregate of all events of the same type are statistically significant. These values are referred to as the average abnormal return (AAR) and the cumulative average abnormal return (CAAR).
 
-The models for each single event are described below as follows.
+## Installation
 
-MeanAdjustedModel
+```bash
+pip install eventstudies
+```
 
-The mean daily return is calculated for the est_size period, the AR value is
-daily returns - the mean daily return.  The CAR value is the cumulative
-sum of (AR).
+Or install from source:
 
-RawReturnsModel
+```bash
+git clone https://github.com/rla3rd/eventstudies.git
+cd eventstudies/eventstudies
+pip install -e .
+```
 
-AR is just the security's daily returns. The CAR value is the cumulative 
-sum of (AR).
+## Requirements
 
-MarketAdjustedModel
+- Python 3.10 or higher
+- numpy >= 1.26.0
+- pandas >= 2.2.3
+- scipy >= 1.12.0
+- statsmodels >= 0.14.0
+- matplotlib >= 3.8.0
+- seaborn >= 0.13.0
+- pandas_datareader >= 0.10.0 (for fetching market data)
 
-The AR value is the daily returns - daily returns of a given market index.
-The CAR value is the cumulative sum of (AR).
+## Quick Start
 
-MarketModel
+```python
+import eventstudies as es
+from eventstudies import SingleEvent, MultipleEvents
+from eventstudies.util import create_returns_parquet
+import numpy as np
 
-A OLS regression is performed between a security's daily returns and the  
-daily returns of a given market index over the est_size period.  Alpha and
-beta are calculated from the regression.  The AR value is the daily returns
-- (predicted value of returns + std error of prediction) using the OLS
-regression results. The CAR value is the cumulative sum of (AR).
+# Option 1: Create returns parquet from pandas_datareader
+create_returns_parquet(
+    tickers=['AAPL', 'GOOGL', 'MSFT', 'SPY'],
+    output_path='data/market/returns.parquet',
+    start_date='2020-01-01',
+    end_date='2023-12-31'
+)
+SingleEvent.import_returns(path='data/market/returns.parquet')
 
-FamaFrench3
+# Option 2: Import returns from existing file
+# SingleEvent.import_returns('returns.csv')
 
-A OLS regression is performed between a security's daily returns vs the Fama
-French 3 factors over the est_size period.  Alpha and beta are calculated 
-from the regression.  The AR value is the daily returns - (predicted value of
-returns + std error of prediction) using the OLS regression results. 
-The CAR value is the cumulative sum of (AR).
+# Import Fama-French factors
+SingleEvent.import_FamaFrench()
 
-Carhart
+# Run a single event study
+event = SingleEvent.MarketModel(
+    ticker='AAPL',
+    mkt_idx='SPY',
+    event_date=np.datetime64('2023-01-15'),
+    event_window=(-5, +10),
+    est_size=252,
+    buffer_size=21
+)
 
-A OLS regression is performed between a security's daily returns vs the Fama
-Carhart Factors (FamaFrench3 + Momentum) over the est_size period.  Alpha and
-beta are calculated from the regression.  The AR value is the daily returns
-- (predicted value of returns + std error of prediction) using the OLS regression
-results. The CAR value is the cumulative sum of (AR).
+# Display results
+print(event.results())
+event.plot()
+```
 
-FamaFrench5
+## Available Models
 
-A OLS regression is performed between a security's daily returns vs the Fama
-French 5 factors over the est_size period.  Alpha and beta are calculated 
-from the regression.  The AR value is the daily returns - (predicted value of
-returns + std error of prediction) using the OLS regression results.
-The CAR value is the cumulative sum of (AR).
+This package provides the following event study models:
+
+- **MeanAdjustedModel**: The mean daily return is calculated for the `est_size` period. The AR value is daily returns minus the mean daily return. The CAR value is the cumulative sum of AR.
+
+- **OrdinaryReturnsModel** (RawReturnsModel): AR is just the security's daily returns. The CAR value is the cumulative sum of AR.
+
+- **MarketAdjustedModel**: The AR value is the daily returns minus daily returns of a given market index. The CAR value is the cumulative sum of AR.
+
+- **MarketModel**: An OLS regression is performed between a security's daily returns and the daily returns of a given market index over the `est_size` period. Alpha and beta are calculated from the regression. The AR value is the daily returns minus (predicted value of returns + std error of prediction) using the OLS regression results. The CAR value is the cumulative sum of AR.
+
+- **FamaFrench3**: An OLS regression is performed between a security's daily returns vs the Fama-French 3 factors over the `est_size` period. Alpha and beta are calculated from the regression. The AR value is the daily returns minus (predicted value of returns + std error of prediction) using the OLS regression results. The CAR value is the cumulative sum of AR.
+
+- **Carhart**: An OLS regression is performed between a security's daily returns vs the Carhart factors (FamaFrench3 + Momentum) over the `est_size` period. Alpha and beta are calculated from the regression. The AR value is the daily returns minus (predicted value of returns + std error of prediction) using the OLS regression results. The CAR value is the cumulative sum of AR.
+
+- **FamaFrench5**: An OLS regression is performed between a security's daily returns vs the Fama-French 5 factors over the `est_size` period. Alpha and beta are calculated from the regression. The AR value is the daily returns minus (predicted value of returns + std error of prediction) using the OLS regression results. The CAR value is the cumulative sum of AR.
+
+## Documentation
+
+For detailed documentation, see the [docs](docs-src/source/index.md) directory.
+
+## License
+
+GNU General Public License v3 (GPLv3)
+
+## Author
+
+Rick Albright
