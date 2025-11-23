@@ -11,6 +11,7 @@ import warnings
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
+import pandas_market_calendars as mcal
 
 warnings.simplefilter(action='ignore', category=Warning)
 
@@ -338,8 +339,35 @@ def create_returns_parquet(
             # Extract price series
             prices = df[price_col].copy()
             
-            # Calculate log returns: log(price_t / price_{t-1})
-            # Shift prices by 1 day to get previous day's price
+            # Filter to positive prices
+            prices = prices[prices > 0].copy()
+            
+            # Get NYSE trading calendar
+            nyse = mcal.get_calendar('NYSE')
+            
+            # Get valid trading days for the date range
+            min_date = prices.index.min()
+            max_date = prices.index.max()
+            trading_days = nyse.valid_days(start_date=min_date, end_date=max_date)
+            trading_days_set = set(pd.to_datetime(trading_days).date)
+            
+            # Filter prices to only trading days
+            prices_df = pd.DataFrame({'date': prices.index, 'price': prices.values})
+            prices_df['date_only'] = pd.to_datetime(prices_df['date']).dt.date
+            prices_df = prices_df[prices_df['date_only'].isin(trading_days_set)].copy()
+            prices_df = prices_df.drop(columns=['date_only'])
+            prices_df = prices_df.set_index('date')
+            prices = prices_df['price']
+            
+            if len(prices) == 0:
+                warnings.warn(f"No trading day data for {ticker}")
+                continue
+            
+            # Sort by date to ensure proper ordering
+            prices = prices.sort_index()
+            
+            # Calculate log returns using previous trading day
+            # Group by ticker and calculate log return using previous row (which is previous trading day)
             prev_prices = prices.shift(1)
             
             # Calculate log returns, handling division by zero
@@ -352,8 +380,8 @@ def create_returns_parquet(
                 'logreturn': log_returns
             })
             
-            # Remove first row (NaN due to shift)
-            returns_df = returns_df.dropna()
+            # Filter out rows where we don't have a previous trading day
+            returns_df = returns_df[returns_df['logreturn'].notna()].copy()
             
             if not returns_df.empty:
                 all_data.append(returns_df)
