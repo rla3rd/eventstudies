@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
 import pandas_market_calendars as mcal
+import requests
+import zipfile
+import io
 
 warnings.simplefilter(action='ignore', category=Warning)
 
@@ -102,6 +105,95 @@ def get_logreturns(env=os.environ.get('ENV', 'development')):
         print(msg)
 
     return data
+
+def _download_famafrench_csv_fallback(model_name: str, start_date: str = None, end_date: str = None) -> Optional[pd.DataFrame]:
+    """
+    Download Fama-French factors directly from CSV zip URLs as fallback.
+    
+    Parameters
+    ----------
+    model_name : str
+        Model name ('F-F_Research_Data_Factors_daily', 'F-F_Research_Data_5_Factors_2x3_daily', 
+        or 'F-F_Momentum_Factor_daily')
+    start_date : str, optional
+        Start date for filtering data (YYYY-MM-DD format)
+    end_date : str, optional
+        End date for filtering data (YYYY-MM-DD format)
+    
+    Returns
+    -------
+    pandas.DataFrame or None
+        DataFrame with Fama-French factors, or None if download fails
+    """
+    # Map model names to CSV zip URLs
+    csv_urls = {
+        'F-F_Research_Data_Factors_daily': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip',
+        'F-F_Research_Data_5_Factors_2x3_daily': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip',
+        'F-F_Momentum_Factor_daily': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_daily_CSV.zip'
+    }
+    
+    if model_name not in csv_urls:
+        return None
+    
+    url = csv_urls[model_name]
+    
+    try:
+        # Download the zip file
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        # Extract CSV from zip
+        with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
+            # Find the CSV file in the zip
+            csv_files = [f for f in zip_file.namelist() if f.endswith('.csv')]
+            if not csv_files:
+                warnings.warn(f"No CSV file found in zip for {model_name}")
+                return None
+            
+            # Read the first CSV file
+            csv_content = zip_file.read(csv_files[0])
+            
+            # Parse CSV - Fama-French CSVs have a header row, then data
+            # Skip description lines that start with non-numeric characters
+            lines = csv_content.decode('utf-8').split('\n')
+            data_lines = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # Check if line starts with a date (YYYYMMDD format) or is header
+                if line[0].isdigit() or 'Mkt-RF' in line or 'SMB' in line or 'Mom' in line:
+                    data_lines.append(line)
+            
+            if not data_lines:
+                warnings.warn(f"No data lines found in CSV for {model_name}")
+                return None
+            
+            # Parse into DataFrame
+            from io import StringIO
+            csv_string = '\n'.join(data_lines)
+            df = pd.read_csv(StringIO(csv_string))
+            
+            # Fama-French CSVs typically have date as first column (YYYYMMDD format)
+            # Convert date column to datetime
+            date_col = df.columns[0]
+            df[date_col] = pd.to_datetime(df[date_col].astype(str), format='%Y%m%d', errors='coerce')
+            df = df.set_index(date_col)
+            
+            # Filter by date range if specified
+            if start_date:
+                start_dt = pd.to_datetime(start_date)
+                df = df[df.index >= start_dt]
+            if end_date:
+                end_dt = pd.to_datetime(end_date)
+                df = df[df.index <= end_dt]
+            
+            return df
+            
+    except Exception as e:
+        warnings.warn(f"Error downloading {model_name} from CSV fallback URL: {e}")
+        return None
+
 
 def update_famafrench(start_date='2003-07-01', end_date=None):
     """
@@ -236,9 +328,61 @@ def update_famafrench(start_date='2003-07-01', end_date=None):
             else: 
                 odf = pd.concat([odf, df], axis=1)
         except Exception as e:
-            warnings.warn(f"Error fetching {model}: {e}")
-            import traceback
-            warnings.warn(f"Traceback: {traceback.format_exc()}")
+            # Check if it's a 404 error or HTTP error
+            error_str = str(e).lower()
+            is_404 = '404' in error_str or 'not found' in error_str or ('http' in error_str and ('error' in error_str or 'exception' in error_str))
+            
+            if is_404:
+                warnings.warn(f"404 error fetching {model} from pandas_datareader, trying CSV fallback URL...")
+                try:
+                    df = _download_famafrench_csv_fallback(model, start_date, end_date)
+                    if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
+                        # Process the downloaded CSV data same as pandas_datareader result
+                        if models[model] == 'ff3':
+                            cols = {
+                                'Mkt-RF': 'mkt_rf',
+                                'SMB': 'ff3_smb',
+                                'HML': 'ff3_hml',
+                                'RF': 'ff3_rf'
+                            }
+                        elif models[model] == 'ff5':
+                            cols = {
+                                'Mkt-RF': 'mkt_rf',
+                                'SMB': 'ff5_smb',
+                                'HML': 'ff5_hml',
+                                'RMW': 'ff5_rmw',
+                                'CMA': 'ff5_cma',
+                                'RF': 'ff5_rf'
+                            }
+                        else:  # momentum
+                            mom_col = [col for col in df.columns if 'Mom' in col or 'mom' in col]
+                            if len(mom_col) > 0:
+                                cols = {mom_col[0]: 'mom'}
+                            else:
+                                cols = {'Mom': 'mom'}  # fallback
+                        
+                        # Only rename columns that exist
+                        existing_cols = {k: v for k, v in cols.items() if k in df.columns}
+                        if len(existing_cols) > 0:
+                            df.rename(columns=existing_cols, inplace=True)
+                        
+                        # Remove duplicate mkt_rf from ff5 (already in ff3)
+                        if models[model] == 'ff5' and 'mkt_rf' in df.columns:
+                            df.drop(columns=['mkt_rf'], inplace=True)
+                        
+                        if odf is None:
+                            odf = df
+                        else:
+                            odf = pd.concat([odf, df], axis=1)
+                        warnings.warn(f"Successfully loaded {model} from CSV fallback URL")
+                    else:
+                        warnings.warn(f"CSV fallback also failed for {model}")
+                except Exception as fallback_error:
+                    warnings.warn(f"Error fetching {model} from CSV fallback: {fallback_error}")
+            else:
+                warnings.warn(f"Error fetching {model}: {e}")
+                import traceback
+                warnings.warn(f"Traceback: {traceback.format_exc()}")
     
     if odf is None:
         raise ValueError("Failed to fetch Fama-French data from pandas_datareader")
