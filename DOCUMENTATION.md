@@ -69,6 +69,17 @@ SingleEvent.import_returns(path='data/market/returns.parquet')
 # returns_df = pd.read_csv('returns.csv', parse_dates=['date'])
 # SingleEvent.import_returns(dataframe=returns_df)
 
+# Option 3: Download and calculate log returns using Tiingo
+# from eventstudies import tiingo
+# raw_prices = tiingo.download_prices(
+#     tickers=['AAPL', 'GOOGL', 'MSFT', 'SPY'],
+#     api_key='YOUR_TIINGO_API_KEY', # or leave blank to load from env TIINGO_API_KEY
+#     start_date='2020-01-01',
+#     end_date='2023-12-31'
+# )
+# wide_returns = tiingo.to_logreturns(raw_prices, calendar='NYSE')
+# SingleEvent.import_returns(dataframe=wide_returns)
+
 # Load Fama-French factors (fetches factors from Kenneth French's library via pandas_datareader)
 SingleEvent.import_FamaFrench()
 ```
@@ -292,3 +303,24 @@ Core constructor to execute custom models.
 
 #### `create_returns_parquet(tickers, output_path, start_date, end_date, data_source='yahoo', use_adjusted=True)`
 Fetches EOD stock prices from pandas-datareader sources, converts them to daily log returns, formats them as a wide-form table, and writes them to a parquet file.
+
+---
+
+### Tiingo Integration
+
+The `eventstudies.tiingo` module provides helper utilities to download historical data directly from the Tiingo API and format it cleanly for use.
+
+#### `tiingo.download_prices(tickers, api_key=None, start_date=None, end_date=None, delay=0.5)`
+Downloads historical daily EOD price data for a list of tickers.
+* **`tickers`** (List[str]): List of ticker symbols to download.
+* **`api_key`** (str, optional): Your Tiingo API token. If omitted, attempts to read it from the `TIINGO_API_KEY` environment variable.
+* **`start_date`** (str, optional): Start date in `YYYY-MM-DD` format.
+* **`end_date`** (str, optional): End date in `YYYY-MM-DD` format.
+* **`delay`** (float, optional): Spaced delay (seconds) between requests to prevent rate limit throttling. Default: `0.5`
+* **Returns:** A long-format pandas DataFrame with columns `['date', 'ticker', 'adjClose']`.
+
+#### `tiingo.to_logreturns(prices_df, calendar='NYSE')`
+Processes the downloaded long-format DataFrame and returns the wide-format log returns table.
+* **`prices_df`** (pandas.DataFrame): The DataFrame returned by `download_prices`.
+* **`calendar`** (str, optional): The name of the `pandas_market_calendars` trading calendar to filter dates by. Default: `'NYSE'`
+* **Returns:** A wide-format pandas DataFrame with date as index and tickers as columns.

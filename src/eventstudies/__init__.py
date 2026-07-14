@@ -20,5 +20,6 @@ __description__ = "Events analyzer used to perform event study analysis"
 
 from .single_event import SingleEvent
 from .multiple_events import MultipleEvents
+from . import tiingo
 
-__all__ = ["SingleEvent", "MultipleEvents", "__version__"]
+__all__ = ["SingleEvent", "MultipleEvents", "tiingo", "__version__"]

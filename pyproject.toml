@@ -16,7 +16,7 @@ dynamic = ["version"]
 dependencies = [
     "numpy>=1.26.0,<2.0",
     "matplotlib>=3.8.0",
-    "pandas>=2.2.3",
+    "pandas>=2.2.3,<3.0.0",
     "statsmodels>=0.14.0",
     "scipy>=1.12.0",
     "pandas_datareader>=0.10.0",
@@ -84,7 +84,7 @@ tag_regex = "v(\\d+\\.\\d+\\.\\d+)"
 root = "."
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -92,6 +92,6 @@ disallow_incomplete_defs = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py310"
 select = ["E", "F", "B", "I"]
 ignore = []
