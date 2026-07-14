@@ -99,5 +99,4 @@ GNU General Public License v3 (GPLv3)
 
 ## Author
 
-Rick Albright  
-Jean-Baptiste Lemaire
+Richard Albright
