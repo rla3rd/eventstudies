@@ -11,14 +11,14 @@ Single events as described above are then aggregated and analyzed using the same
 ## Installation
 
 ```bash
-pip install eventstudies
+pip install ffjr-eventstudies
 ```
 
 Or install from source:
 
 ```bash
 git clone https://github.com/rla3rd/eventstudies.git
-cd eventstudies/eventstudies
+cd eventstudies
 pip install -e .
 ```
 

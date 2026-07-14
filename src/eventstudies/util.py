@@ -1,3 +1,11 @@
+# Copyright (C) 2020 Jean-Baptiste Lemaire
+# Copyright (C) 2023 Richard Albright
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
 import sys
 import os
 import traceback
@@ -390,7 +398,10 @@ def update_famafrench(start_date='2003-07-01', end_date=None):
     # Convert index to date column and ensure proper format
     odf = odf.reset_index()
     odf.rename(columns={odf.columns[0]: 'date'}, inplace=True)
-    odf['date'] = pd.to_datetime(odf['date'])
+    if hasattr(odf['date'].dt, 'to_timestamp'):
+        odf['date'] = odf['date'].dt.to_timestamp()
+    else:
+        odf['date'] = pd.to_datetime(odf['date'])
     
     # Convert percentage values to decimals (Fama-French data is in percentages)
     for key in odf.columns:

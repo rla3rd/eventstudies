@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 # Add the src directory to the path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 import eventstudies as es
@@ -52,7 +52,9 @@ if not famafrench_path.exists():
 
 # Import returns and Fama-French factors
 try:
-    SingleEvent.import_returns(path=str(returns_path))
+    import pandas as pd
+    df_returns = pd.read_csv(returns_path)
+    SingleEvent.import_returns(dataframe=df_returns)
     print("✓ Imported returns data")
 except Exception as e:
     print(f"✗ Failed to import returns: {e}")
